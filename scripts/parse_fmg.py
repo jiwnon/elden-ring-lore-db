@@ -1,109 +1,106 @@
 """
-Parse Elden Ring FMG (text) data from erdb or similar extracted sources.
-Input:  data/raw/*.json (from erdb / yabber extraction)
-Output: data/processed/lore_entries.json
+Parse downloaded raw data into unified lore_entries.json.
+
+Input:
+  data/raw/fromsoft_fts/elden_ring_base.json  — { itemLikes: [...] }
+  data/raw/fromsoft_fts/elden_ring_sote.json  — { itemLikes: [...] }
+
+Output:
+  data/processed/lore_entries.json
+
+Each entry schema:
+  {
+    "id":          str,   e.g. "base_1000"
+    "category":    str,   "item" | "skill" | "spell" | "consumable"
+    "source_name": str,   item display name
+    "text_en":     str,   in-game description (English)
+    "text_ko":     str,   Korean translation (empty for now)
+    "location":    str,   empty until location data is added
+    "game":        str,   "base" | "sote"
+  }
 """
 
 import json
-import os
-import re
 from pathlib import Path
 
-RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
-OUT_DIR = Path(__file__).parent.parent / "data" / "processed"
+ROOT = Path(__file__).parent.parent
+RAW_DIR = ROOT / "data" / "raw" / "fromsoft_fts"
+OUT_DIR = ROOT / "data" / "processed"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-CATEGORY_MAP = {
-    "weapon": "item",
-    "armor": "item",
-    "talisman": "item",
-    "spell": "item",
-    "ash_of_war": "item",
-    "npc": "dialogue",
-    "talk": "dialogue",
-    "goods": "item",
-    "cutscene": "cutscene",
+# fromsoft-fts type → our category
+TYPE_MAP = {
+    "talisman":   "item",
+    "goods":      "item",
+    "ash":        "skill",
+    "art":        "skill",
+    "sorcery":    "spell",
+    "incantation":"spell",
+    "weapon":     "item",
+    "armor":      "item",
+    "shield":     "item",
 }
 
-
-def detect_category(filename: str) -> str:
-    name = filename.lower()
-    for key, cat in CATEGORY_MAP.items():
-        if key in name:
-            return cat
-    return "misc"
+SOURCES = [
+    ("elden_ring_base.json", "base"),
+    ("elden_ring_sote.json", "sote"),
+]
 
 
-def parse_erdb_file(filepath: Path) -> list[dict]:
-    """Parse a single erdb-format JSON file into lore entries."""
-    with open(filepath, encoding="utf-8") as f:
+def parse_file(path: Path, game: str) -> list[dict]:
+    with open(path, encoding="utf-8") as f:
         raw = json.load(f)
 
+    items = raw.get("itemLikes", []) if isinstance(raw, dict) else raw
     entries = []
-    category = detect_category(filepath.stem)
-    source_name = filepath.stem
 
-    # erdb format: dict of id -> { summary, description, ... }
-    if isinstance(raw, dict):
-        for entry_id, entry in raw.items():
-            text_en = entry.get("description") or entry.get("summary") or ""
-            text_ko = entry.get("description_ko") or entry.get("summary_ko") or ""
-            name = entry.get("name", entry_id)
-            location = entry.get("location", "")
+    for item in items:
+        text = (item.get("description") or "").strip()
+        if not text:
+            continue
 
-            if not text_en.strip():
-                continue
+        raw_type = (item.get("type") or "").lower()
+        sub_type = (item.get("subType") or "").lower()
+        category = TYPE_MAP.get(sub_type) or TYPE_MAP.get(raw_type) or "item"
 
-            entries.append({
-                "id": f"{source_name}_{entry_id}",
-                "category": category,
-                "source_name": name,
-                "text_en": text_en.strip(),
-                "text_ko": text_ko.strip(),
-                "location": location,
-            })
-
-    # list format: [ { id, text, ... } ]
-    elif isinstance(raw, list):
-        for item in raw:
-            text_en = item.get("text_en") or item.get("text") or item.get("description") or ""
-            if not text_en.strip():
-                continue
-            entries.append({
-                "id": item.get("id", ""),
-                "category": category,
-                "source_name": item.get("name") or item.get("source_name") or source_name,
-                "text_en": text_en.strip(),
-                "text_ko": item.get("text_ko") or item.get("text_ja") or "",
-                "location": item.get("location") or item.get("region") or "",
-            })
+        entries.append({
+            "id":          f"{game}_{item.get('id', '')}",
+            "category":    category,
+            "source_name": (item.get("title") or "").strip(),
+            "text_en":     text,
+            "text_ko":     "",
+            "location":    "",
+            "game":        game,
+        })
 
     return entries
 
 
 def run():
     all_entries: list[dict] = []
-    raw_files = list(RAW_DIR.glob("*.json"))
 
-    if not raw_files:
-        print(f"No JSON files found in {RAW_DIR}")
-        print("Place extracted erdb/FMG JSON files there and re-run.")
-        return
+    for filename, game in SOURCES:
+        path = RAW_DIR / filename
+        if not path.exists():
+            print(f"  [SKIP] {filename} not found — run fetch_erdb.py first")
+            continue
 
-    for path in raw_files:
-        print(f"  Parsing {path.name}...")
-        try:
-            entries = parse_erdb_file(path)
-            all_entries.extend(entries)
-            print(f"    -> {len(entries)} entries")
-        except Exception as e:
-            print(f"    [ERROR] {e}")
+        print(f"  Parsing {filename} ({game})...")
+        entries = parse_file(path, game)
+        all_entries.extend(entries)
+
+        by_cat: dict[str, int] = {}
+        for e in entries:
+            by_cat[e["category"]] = by_cat.get(e["category"], 0) + 1
+        for cat, n in sorted(by_cat.items()):
+            print(f"    {cat:15} {n:>5} entries")
+        print(f"    {'TOTAL':15} {len(entries):>5}\n")
 
     out_path = OUT_DIR / "lore_entries.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(all_entries, f, ensure_ascii=False, indent=2)
 
-    print(f"\nTotal: {len(all_entries)} entries saved to {out_path}")
+    print(f"Saved {len(all_entries)} total entries -> {out_path}")
 
 
 if __name__ == "__main__":

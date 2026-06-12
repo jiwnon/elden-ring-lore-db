@@ -36,7 +36,9 @@ Thumbs.db
 *.tsbuildinfo
 next-env.d.ts
 
-# Data (raw game files — do not commit)
+# Data (raw downloaded files — large, reproducible via fetch_erdb.py)
+data/raw/fromsoft_fts/*.json
+data/raw/erdb/
 data/raw/*.dcx
 data/raw/*.bnd
 data/raw/*.fmg

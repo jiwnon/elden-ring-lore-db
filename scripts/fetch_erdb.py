@@ -1,9 +1,14 @@
 """
-Download Elden Ring data from public datasets.
+Download Elden Ring raw text data from public sources.
 
 Sources:
-  - erdb:         https://github.com/EldenRingDatabase/erdb  (MIT)
   - fromsoft-fts: https://github.com/tefkah/fromsoft-fts
+    assets/data.json  — base game items (talisman, ash, art, goods, sorcery)
+    assets/data2.json — Shadow of the Erdtree DLC
+
+Output:
+  data/raw/fromsoft_fts/elden_ring_base.json
+  data/raw/fromsoft_fts/elden_ring_sote.json
 
 Usage:
     python scripts/fetch_erdb.py
@@ -14,56 +19,50 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
-RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
-RAW_DIR.mkdir(parents=True, exist_ok=True)
+ROOT = Path(__file__).parent.parent
+RAW_FROMSOFT = ROOT / "data" / "raw" / "fromsoft_fts"
+RAW_FROMSOFT.mkdir(parents=True, exist_ok=True)
 
-# erdb — structured item/NPC data (MIT license)
-ERDB_BASE = "https://raw.githubusercontent.com/EldenRingDatabase/erdb/main/er-params"
-ERDB_TARGETS = [
-    ("weapons.json",      "weapons/weapons.json"),
-    ("armors.json",       "armors/armors.json"),
-    ("talismans.json",    "talismans/talismans.json"),
-    ("goods.json",        "goods/goods.json"),
-    ("ashes_of_war.json", "ashes-of-war/ashes-of-war.json"),
-    ("spells.json",       "spells/spells.json"),
-    ("spirit_ashes.json", "spirit-ashes/spirit-ashes.json"),
-]
-
-# fromsoft-fts — item descriptions + NPC dialogue (searchable JSON)
-FROMSOFT_FTS_BASE = "https://raw.githubusercontent.com/tefkah/fromsoft-fts/main/public/data"
-FROMSOFT_TARGETS = [
-    ("fts_elden_ring_items.json",    "elden-ring/items.json"),
-    ("fts_elden_ring_dialogue.json", "elden-ring/dialogue.json"),
+SOURCES = [
+    (
+        "elden_ring_base.json",
+        "https://raw.githubusercontent.com/tefkah/fromsoft-fts/main/assets/data.json",
+        "Elden Ring base game",
+    ),
+    (
+        "elden_ring_sote.json",
+        "https://raw.githubusercontent.com/tefkah/fromsoft-fts/main/assets/data2.json",
+        "Shadow of the Erdtree DLC",
+    ),
 ]
 
 
-def fetch(url: str, dest: Path):
-    print(f"  Fetching {dest.name}  <- {url}")
+def fetch(label: str, url: str, dest: Path):
+    print(f"  [{label}]")
+    print(f"  URL  : {url}")
+    print(f"  Dest : {dest}")
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "elden-ring-lore-db/1.0"})
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             data = resp.read()
         with open(dest, "wb") as f:
             f.write(data)
         parsed = json.loads(data)
-        count = len(parsed) if isinstance(parsed, (dict, list)) else "?"
-        print(f"    -> {count} entries saved to {dest}")
+        items = parsed.get("itemLikes", parsed) if isinstance(parsed, dict) else parsed
+        count = len(items) if isinstance(items, list) else "?"
+        size_kb = len(data) / 1024
+        print(f"  -> {count} entries  ({size_kb:.0f} KB)\n")
     except urllib.error.HTTPError as e:
-        print(f"    [HTTP {e.code}] {url}")
+        print(f"  [HTTP {e.code}] {url}\n")
     except Exception as e:
-        print(f"    [ERROR] {e}")
+        print(f"  [ERROR] {e}\n")
 
 
 def run():
-    print("=== Fetching erdb data ===")
-    for filename, path in ERDB_TARGETS:
-        fetch(f"{ERDB_BASE}/{path}", RAW_DIR / filename)
-
-    print("\n=== Fetching fromsoft-fts data ===")
-    for filename, path in FROMSOFT_TARGETS:
-        fetch(f"{FROMSOFT_FTS_BASE}/{path}", RAW_DIR / filename)
-
-    print(f"\nAll done. Run `python scripts/parse_fmg.py` next.")
+    print("=== Downloading Elden Ring text data (fromsoft-fts) ===\n")
+    for filename, url, label in SOURCES:
+        fetch(label, url, RAW_FROMSOFT / filename)
+    print("Done. Run `python scripts/parse_fmg.py` next.")
 
 
 if __name__ == "__main__":
