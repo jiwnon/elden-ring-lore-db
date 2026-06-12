@@ -36,12 +36,13 @@ Thumbs.db
 *.tsbuildinfo
 next-env.d.ts
 
-# Data (raw downloaded files — large, reproducible via fetch_erdb.py)
-data/raw/fromsoft_fts/*.json
+# Data (raw/generated — large or reproducible, exclude from git)
+data/raw/fromsoft_fts/
 data/raw/erdb/
 data/raw/*.dcx
 data/raw/*.bnd
 data/raw/*.fmg
+data/lore.db
 
 # Python
 __pycache__/

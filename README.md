@@ -101,15 +101,35 @@ elden-ring-lore-db/
 > **주의**: 게임 파일 직접 추출은 Elden Ring 소유 시에만 가능합니다.
 > 이 프로젝트는 공개된 데이터셋(erdb, fromsoft-fts)을 기본 소스로 사용합니다.
 
-## 데이터 수집 방법
+## 실행 방법
 
 ```bash
-# 1. erdb / fromsoft-fts에서 데이터 다운로드
+# 1. 의존성 설치
+pip install -r requirements.txt
+
+# 2. 원본 데이터 다운로드 (items JSON + FMG HTML)
 python scripts/fetch_erdb.py
 
-# 2. lore_entries.json 생성
+# 3. 아이템 / 스킬 / 마법 파싱
 python scripts/parse_fmg.py
+
+# 4. NPC 대사 / 컷씬 자막 파싱
+python scripts/parse_html.py
+
+# 5. 통합 lore_entries.json 생성
+python scripts/merge_entries.py
+
+# 6. SQLite + FTS5 DB 빌드
+python scripts/build_db.py
+
+# 7. Streamlit 앱 실행
+streamlit run app/app.py
 ```
+
+> Ollama가 없으면 추론 기능은 비활성화됩니다.
+> `ollama serve` + `ollama pull llama3.1` 후 토글 ON.
+
+## 데이터 출처
 
 ## 로드맵
 
